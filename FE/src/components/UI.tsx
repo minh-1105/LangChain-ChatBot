@@ -76,50 +76,130 @@ function Bubble({ message }: { message: Message }): ReactElement {
       </div>
       <div className="bubble__content">
         {message.content}
+        {message.files && message.files.length > 0 && (
+          <div className="bubble__files">
+            {message.files.map((file, index) => (
+              <div key={index} className="bubble__file">
+                <div className="bubble__file-icon">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M14 2H6C4.9 2 4 2.9 4 4V20C4 21.1 4.89 22 6 22H18C19.1 22 20 21.1 20 20V8L14 2Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    <path d="M14 2V8H20" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                  </svg>
+                </div>
+                <div className="bubble__file-info">
+                  <div className="bubble__file-name">{file.name}</div>
+                  <div className="bubble__file-size">{(file.size / 1024).toFixed(1)} KB</div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
         <div className="bubble__meta">{new Date(message.createdAt).toLocaleTimeString()}</div>
       </div>
     </div>
   );
 }
 
-function ChatInput({ onSend, disabled }: { onSend: (text: string) => void; disabled?: boolean }): ReactElement {
+function ChatInput({ onSend, disabled }: { onSend: (text: string, files?: File[]) => void; disabled?: boolean }): ReactElement {
   const [text, setText] = useState("");
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const send = () => {
     const v = text.trim();
-    if (!v || disabled) return;
+    if ((!v && selectedFiles.length === 0) || disabled) return;
+    const messageText = v || (selectedFiles.length > 0 ? `Đã gửi ${selectedFiles.length} tệp` : "");
     setText("");
-    onSend(v);
+    setSelectedFiles([]);
+    onSend(messageText, selectedFiles);
+  };
+
+  const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files || []);
+    setSelectedFiles(prev => [...prev, ...files]);
+  };
+
+  const removeFile = (index: number) => {
+    setSelectedFiles(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const openFileDialog = () => {
+    fileInputRef.current?.click();
   };
 
   return (
     <div className="composer">
-      <div style={{ position: 'relative' }}>
-        <textarea
-          rows={1}
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && !e.shiftKey) {
-              e.preventDefault();
-              send();
-            }
-          }}
-          placeholder="Message ChatGPT..."
-          className="input"
-          disabled={disabled}
-        />
+      {selectedFiles.length > 0 && (
+        <div className="composer__files">
+          {selectedFiles.map((file, index) => (
+            <div key={index} className="composer__file-item">
+              <span className="composer__file-name">{file.name}</span>
+              <button 
+                onClick={() => removeFile(index)}
+                className="composer__file-remove"
+                aria-label="Remove file"
+              >
+                ×
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      
+      <div className="composer__input-container">
         <button
-          onClick={send}
+          onClick={openFileDialog}
           disabled={disabled}
-          className="btn"
-          aria-label="Send message"
+          className="btn btn--file btn--file-left"
+          aria-label="Add file"
         >
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M2 12L20 12M20 12L14 6M20 12L14 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M14 2H6C4.9 2 4 2.9 4 4V20C4 21.1 4.89 22 6 22H18C19.1 22 20 21.1 20 20V8L14 2Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M14 2V8H20" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M16 13H8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M16 17H8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            <path d="M10 9H9H8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
         </button>
+        
+        <div style={{ position: 'relative', flex: 1 }}>
+          <textarea
+            rows={1}
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                send();
+              }
+            }}
+            placeholder="Message ChatGPT..."
+            className="input"
+            disabled={disabled}
+          />
+          
+          <button
+            onClick={send}
+            disabled={disabled}
+            className="btn"
+            aria-label="Send message"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M2 12L20 12M20 12L14 6M20 12L14 18" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          </button>
+        </div>
       </div>
+      
+      <input
+        ref={fileInputRef}
+        type="file"
+        multiple
+        onChange={handleFileSelect}
+        style={{ display: 'none' }}
+        accept=".pdf,.doc,.docx,.txt,.jpg,.jpeg,.png,.gif"
+      />
+      
       <div className="composer__hint">Press Enter to send • Shift+Enter for new line</div>
     </div>
   );
@@ -150,9 +230,15 @@ export default function UI(): ReactElement {
     setActiveId(t.id);
   }
 
-  function send(text: string) {
+  function send(text: string, files?: File[]) {
     // Optimistic user message
-    const userMsg: Message = { id: newId(), role: "user", content: text, createdAt: now() };
+    const userMsg: Message = { 
+      id: newId(), 
+      role: "user", 
+      content: text, 
+      createdAt: now(),
+      files: files || []
+    };
     setThreads((prev) =>
       prev.map((t) => (t.id === activeId ? { ...t, messages: [...t.messages, userMsg], updatedAt: now() } : t))
     );
@@ -160,10 +246,11 @@ export default function UI(): ReactElement {
     // Fake assistant reply (bạn thay đoạn này bằng gọi API real)
     setTyping(true);
     setTimeout(() => {
+      const fileInfo = files && files.length > 0 ? ` và ${files.length} tệp đính kèm` : "";
       const reply: Message = {
         id: newId(),
         role: "assistant",
-        content: `Bạn vừa nói: "${text}"` ,
+        content: `Bạn vừa nói: "${text}"${fileInfo}`,
         createdAt: now(),
       };
       setThreads((prev) =>

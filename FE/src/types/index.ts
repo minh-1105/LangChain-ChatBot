@@ -4,6 +4,7 @@ export type Message = {
   role: "user" | "assistant" | "system";
   content: string;
   createdAt: string;
+  files?: File[];
 };
 
 export type Thread = {
