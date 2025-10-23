@@ -156,7 +156,7 @@ function ChatInput({ onSend, disabled }: { onSend: (text: string) => void; disab
 }
 
 // ---- Main ----
-export default function ChatGPTLikeUI(): ReactElement {
+export default function UI(): ReactElement {
   const [dark, setDark] = useState(true);
   const [threads, setThreads] = useState<Thread[]>([seedThread()]);
   const [activeId, setActiveId] = useState<string>(threads[0].id);
