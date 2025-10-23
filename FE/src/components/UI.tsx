@@ -1,36 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactElement } from 'react';
-import './UI.css';
-
-
-// ---- Types ----
- type Message = {
-  id: string;
-  role: "user" | "assistant" | "system";
-  content: string;
-  createdAt: string;
-};
-
- type Thread = {
-  id: string;
-  title: string;
-  updatedAt: string;
-  messages: Message[];
-};
-
-// ---- Helpers ----
-const now = () => new Date().toISOString();
-const newId = () => Math.random().toString(36).slice(2);
-
-// ---- Seed data ----
-const seedThread = (): Thread => ({
-  id: newId(),
-  title: "New chat",
-  updatedAt: now(),
-  messages: [
-    { id: newId(), role: "assistant", content: "Xin chào 👋\nMình là bot demo. Hãy hỏi mình điều gì đó!", createdAt: now() },
-  ],
-});
+import '../styles/UI.css';
+import type { Message, Thread } from '../types';
+import { now, newId, seedThread } from '../utils';
 
 // ---- Components ----
 function Sidebar({
@@ -99,14 +71,12 @@ function Bubble({ message }: { message: Message }): ReactElement {
 
   return (
     <div className={`bubble ${isUser ? "bubble--user" : "bubble--assistant"}`}>
-      <div style={{ display: 'flex', gap: '16px', alignItems: 'flex-start' }}>
-        <div className={`avatar ${isUser ? 'user' : 'assistant'}`}>
-          {isUser ? 'U' : 'AI'}
-        </div>
-        <div>
-          {message.content}
-          <div className="bubble__meta">{new Date(message.createdAt).toLocaleTimeString()}</div>
-        </div>
+      <div className={`avatar ${isUser ? 'user' : 'assistant'}`}>
+        {isUser ? 'U' : 'AI'}
+      </div>
+      <div className="bubble__content">
+        {message.content}
+        <div className="bubble__meta">{new Date(message.createdAt).toLocaleTimeString()}</div>
       </div>
     </div>
   );
@@ -254,7 +224,7 @@ export default function UI(): ReactElement {
                   borderRadius: '50%',
                   animation: 'spin 1s linear infinite'
                 }}></div>
-                Bot is typing...
+                AI is typing...
               </div>
             </div>
           )}
