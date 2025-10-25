@@ -16,11 +16,30 @@ def create_thread(first_message): #firstmesdùng để phân biệt đoạn chat
     record = threads.insert_one(thread)
     return str(record.inserted_id)
 
-def get_all_threads():
-    # Lấy toàn bộ danh sách thread, sắp xếp theo thời gian mới nhất.
-    return list(threads.find().sort("created_at", -1))
-
-
+def get_all_threads(page = 1, threads_limit = 3):
+    # nếu user nhập page nhỏ hơn 1 thì mặc định là một
+    if page < 1:
+        page = 1 
+    # tính số lượng trang cần bỏ qua
+    page_skipped = (page - 1) * threads_limit
+    
+    #  find trả vè toàn bộ threads, sort theo thread mới nhất
+    cursor = threads.find().sort('created_at', - 1).skip(page_skipped).limit(threads_limit)
+    # chuyển từ dạng cursor của mongo sang list
+    data = list(cursor)
+    # tổng số thread của databsae
+    total = threads.count_documents({})
+    
+    return {
+        "page": page,              # số trang hiện tại
+        "limit": threads_limit,    # số lượng thread mỗi trang
+        "total_threads": total,    # tổng số thread trong DB
+        "threads": data            # danh sách các thread của trang hiện tại
+    }
+    
+     
+    
+    
 
 
     
