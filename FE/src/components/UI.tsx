@@ -3,6 +3,7 @@ import type { ReactElement } from 'react';
 import '../styles/UI.css';
 import type { Message, Thread } from '../types';
 import { now, newId, seedThread } from '../utils';
+import { api } from '../services/api';
 
 // ---- Components ----
 function Sidebar({
@@ -208,56 +209,200 @@ function ChatInput({ onSend, disabled }: { onSend: (text: string, files?: File[]
 // ---- Main ----
 export default function UI(): ReactElement {
   const [dark, setDark] = useState(true);
-  const [threads, setThreads] = useState<Thread[]>([seedThread()]);
-  const [activeId, setActiveId] = useState<string>(threads[0].id);
+  const [threads, setThreads] = useState<Thread[]>([]);
+  const [activeId, setActiveId] = useState<string>('');
   const [typing, setTyping] = useState(false);
+  const [loading, setLoading] = useState(true);
   
   // Apply dark mode class
   useEffect(() => {
     document.body.classList.toggle('app--dark', dark);
   }, [dark]);
 
-  const activeThread = useMemo(() => threads.find((t) => t.id === activeId)!, [threads, activeId]);
+  // Load data from API
+  useEffect(() => {
+    const loadData = async () => {
+      try {
+        setLoading(true);
+        // Test API connection
+        const health = await api.health();
+        console.log('API Health:', health);
+        
+        // Load threads from API
+        const apiThreads = await api.getAllThreads();
+        setThreads(apiThreads);
+        
+        if (apiThreads.length > 0) {
+          setActiveId(apiThreads[0].id);
+          // Load messages for first thread
+          const messages = await api.getMessages(apiThreads[0].id);
+          setThreads(prev => prev.map(t => 
+            t.id === apiThreads[0].id 
+              ? { ...t, messages } 
+              : t
+          ));
+        }
+      } catch (error) {
+        console.error('Error loading data:', error);
+        // Fallback to mock data
+        const mockThread = seedThread();
+        setThreads([mockThread]);
+        setActiveId(mockThread.id);
+      } finally {
+        setLoading(false);
+      }
+    };
+    
+    loadData();
+  }, []);
+
+  const activeThread = useMemo(() => threads.find((t) => t.id === activeId), [threads, activeId]);
   const listRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight, behavior: "smooth" });
   }, [activeThread?.messages.length, typing]);
 
-  function createThread() {
-    const t = seedThread();
-    setThreads((prev) => [t, ...prev]);
-    setActiveId(t.id);
-  }
-
-  function send(text: string, files?: File[]) {
-    // Optimistic user message
-    const userMsg: Message = { 
-      id: newId(), 
-      role: "user", 
-      content: text, 
-      createdAt: now(),
-      files: files || []
-    };
-    setThreads((prev) =>
-      prev.map((t) => (t.id === activeId ? { ...t, messages: [...t.messages, userMsg], updatedAt: now() } : t))
-    );
-
-    // Fake assistant reply (bạn thay đoạn này bằng gọi API real)
-    setTyping(true);
-    setTimeout(() => {
-      const fileInfo = files && files.length > 0 ? ` và ${files.length} tệp đính kèm` : "";
-      const reply: Message = {
+  async function createThread() {
+    try {
+      console.log('Creating new thread...');
+      const result = await api.createThread("New Chat");
+      console.log('Thread created:', result);
+      
+      // Create welcome message
+      const welcomeMessage: Message = {
         id: newId(),
         role: "assistant",
-        content: `Bạn vừa nói: "${text}"${fileInfo}`,
-        createdAt: now(),
+        content: "Xin chào 👋\nMình là AI Assistant. Hãy hỏi mình điều gì đó!",
+        createdAt: now()
       };
+      
+      // Create local thread object with welcome message
+      const newThread: Thread = {
+        id: result.id,
+        title: "New Chat",
+        updatedAt: now(),
+        messages: [welcomeMessage]
+      };
+      
+      setThreads((prev) => [newThread, ...prev]);
+      setActiveId(newThread.id);
+    } catch (error) {
+      console.error('Error creating thread:', error);
+      // Fallback to mock data
+      const t = seedThread();
+      setThreads((prev) => [t, ...prev]);
+      setActiveId(t.id);
+    }
+  }
+
+  async function send(text: string, files?: File[]) {
+    if (!activeThread) return;
+    
+    try {
+      // Optimistic user message
+      const userMsg: Message = { 
+        id: newId(), 
+        role: "user", 
+        content: text, 
+        createdAt: now(),
+        files: files || []
+      };
+      
+      // Update thread title nếu là message đầu tiên của user (sau tin nhắn chào mừng)
+      const isFirstUserMessage = activeThread.messages.length === 1; // Chỉ có tin nhắn chào mừng
+      const newTitle = isFirstUserMessage ? text.slice(0, 50) + (text.length > 50 ? "..." : "") : activeThread.title;
+      
       setThreads((prev) =>
-        prev.map((t) => (t.id === activeId ? { ...t, messages: [...t.messages, reply], updatedAt: now() } : t))
+        prev.map((t) => (t.id === activeId ? { 
+          ...t, 
+          messages: [...t.messages, userMsg], 
+          updatedAt: now(),
+          title: newTitle
+        } : t))
       );
-      setTyping(false);
-    }, 600);
+
+      // Send to API
+      await api.addMessage(activeId, "user", text);
+      
+      // Cập nhật tên thread nếu là message đầu tiên của user
+      if (isFirstUserMessage) {
+        await api.updateThreadTitle(activeId, newTitle);
+      }
+      
+      // Simulate AI response
+      setTyping(true);
+      setTimeout(async () => {
+        try {
+          const fileInfo = files && files.length > 0 ? ` và ${files.length} tệp đính kèm` : "";
+          const replyContent = `Bạn vừa nói: "${text}"${fileInfo}`;
+          
+          // Send assistant message to API
+          await api.addMessage(activeId, "assistant", replyContent);
+          
+          const reply: Message = {
+            id: newId(),
+            role: "assistant",
+            content: replyContent,
+            createdAt: now(),
+          };
+          setThreads((prev) =>
+            prev.map((t) => (t.id === activeId ? { ...t, messages: [...t.messages, reply], updatedAt: now() } : t))
+          );
+        } catch (error) {
+          console.error('Error sending message:', error);
+        } finally {
+          setTyping(false);
+        }
+      }, 600);
+    } catch (error) {
+      console.error('Error sending message:', error);
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="app">
+        <div style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'center', 
+          height: '100vh',
+          flexDirection: 'column',
+          gap: '16px'
+        }}>
+          <div style={{ 
+            width: '40px', 
+            height: '40px', 
+            border: '4px solid var(--border)', 
+            borderTop: '4px solid var(--accent)',
+            borderRadius: '50%',
+            animation: 'spin 1s linear infinite'
+          }}></div>
+          <div>Loading chat...</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!activeThread) {
+    return (
+      <div className="app">
+        <div style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'center', 
+          height: '100vh',
+          flexDirection: 'column',
+          gap: '16px'
+        }}>
+          <div>No chat selected</div>
+          <button onClick={createThread} className="btn">
+            Start New Chat
+          </button>
+        </div>
+      </div>
+    );
   }
 
   return (
